@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Catatau Lanches</title>
+        <link rel="stylesheet" href="/static/css/cardapio/lanches.css">
+        <link rel="icon" type="image/png" href="/static/imagens/catatauimg.png" alt="favicon do catatau">
+        <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+        <link href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,100..900;1,100..900&family=Ultra&display=swap" rel="stylesheet">
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&icon_names=menu" />
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+    </head>
+
+    
+    <body>
+        
+        <div class="top-banner">
+            UAU! Com uma conta criada você pode favoritar seus lanches no catatau.
+        </div>
+        <header>
+            <a 
+                href="/catatau" class="voltar-menu">
+                <i class="material-icons">arrow_back_ios</i>
+                <span class="voltar">Voltar</span>
+            </a>
+
+            <nav class="navbar">
+                <a href="/cardapio" class="cardapio-up">CARDÁPIO</a>
+                <ul class="nav-links">
+                    <li>
+                        <a href="/catatau">
+                            <span class="material-symbols-outlined">home</span>
+                            Início
+                        </a>
+                    </li>
+                    <li>
+                        <a href="/cardapio">
+                            <span class="material-symbols-outlined">lunch_dining</span>
+                            Cardápio
+                        </a>
+                    </li> 
+                    <li>
+                        <a href="#">
+                            <span class="material-symbols-outlined">sell</span>
+                            Cupons
+                        </a>
+                    </li>
+                    <li>
+                        <a href="/contato">
+                            <span class="material-symbols-outlined">storefront</span>
+                            Contato
+                        </a>
+                    </li>
+                    <li class="only-mobile menu-container-mobile">
+                        <!-- Checkbox invisível para controlar o estado (aberto/fechado) -->
+                        <input type="checkbox" id="toggle-mobile-menu" class="mobile-menu-checkbox">
+
+                        <!-- Label estilizado com o mesmo ícone e texto da barra inferior -->
+                        <label for="toggle-mobile-menu" class="mobile-menu-button">
+                            <span class="material-symbols-outlined">menu</span>
+                            Menu
+                        </label>
+
+                        <!-- Aba/gaveta do menu no mobile -->
+                        <div class="aba_mobile_menu">
+                            <div class="mobile-menu-header">
+                                <img src="/static/imagens/catatauimg.png" alt="Logo Catatau" class="mobile-menu-logo">
+                            </div>
+                            <ul>
+                                <li><a href="/catatau"><span class="material-symbols-outlined">home</span> Início</a></li>
+                                <li><a href="/cardapio"><span class="material-symbols-outlined">lunch_dining</span> Cardápio</a></li>
+                                <li><a href="#"><span class="material-symbols-outlined">sell</span> Cupons</a></li>
+                                <li><a href="/contato"><span class="material-symbols-outlined">storefront</span> Contato</a></li>
+                                <li><hr></li>
+                                <li><a href="/usuario"><span class="material-symbols-outlined">person</span> Perfil</a></li>
+                                <li><a href="#"><span class="material-symbols-outlined">settings</span> Configurações</a></li>
+                                <li><a href="/logout" class="logout"><span class="material-symbols-outlined">logout</span> Sair</a></li>
+                            </ul>
+                        </div>
+                    </li>
+                </ul>
+                
+                <div class="user-area">
+                    <div class="user-menu-container">
+                    
+                        <input type="checkbox" id="toggle-profile-menu" class="menu-checkbox" {% if carrinho %}checked{% endif %}>
+
+                        <label for="toggle-profile-menu" class="button-profile">
+                            <i class="material-icons">shopping_cart</i>
+                        </label>
+
+                        <div class="aba_carrinho">
+                            <div class="carrinho-header">
+                                <h3>Seu Pedido</h3>
+                                <label for="toggle-profile-menu" class="btn-fechar">&times;</label>
+                            </div>
+
+                            <div class="carrinho-body">
+                                {% if carrinho %}
+                                    {% for item in carrinho %}
+                                    <div class="item-carrinho">
+                                        <img src="{{ item.imagem }}" alt="{{ item.nome }}">
+                                        
+                                        <div class="item-info">
+                                            <h4>{{ item.nome }}</h4>
+                                            <span class="preco">R$ {{ "%.2f"|format(item.preco) }}</span>
+                                        </div>
+
+                                        <!-- Seletor de quantidade via FORM -->
+                                        <div class="qtd">
+                                            <form action="/carrinho/atualizar" method="POST">
+                                                <input type="hidden" name="item_id" value="{{ item.id }}">
+                                                <input type="hidden" name="acao" value="diminuir">
+                                                <button type="submit" class="btn-qtd">-</button>
+                                            </form>
+
+                                            <span class="qtd-numero">{{ item.quantidade }}</span>
+
+                                            <form action="/carrinho/atualizar" method="POST">
+                                                <input type="hidden" name="item_id" value="{{ item.id }}">
+                                                <input type="hidden" name="acao" value="aumentar">
+                                                <button type="submit" class="btn-qtd">+</button>
+                                            </form>
+                                        </div>
+
+                                        <!-- Botão de remover via FORM -->
+                                        <form action="/carrinho/remover" method="POST">
+                                            <input type="hidden" name="item_id" value="{{ item.id }}">
+                                            <button type="submit" class="btn-remover" title="Remover item">
+                                                <span class="material-symbols-outlined">delete</span>
+                                            </button>
+                                        </form>
+                                    </div>
+                                    {% endfor %}
+                                {% else %}
+                                    <p style="text-align: center; color: #888; margin: 20px 0;">Seu carrinho está vazio.</p>
+                                {% endif %}
+                            </div>
+
+                            <div class="carrinho-footer">
+                                <div class="total-area">
+                                    <span>Total:</span>
+                                    <strong>R$ {{ "%.2f"|format(total_carrinho) }}</strong>
+                                </div>
+                                <a href="/checkout" class="btn-finalizar">Finalizar Pedido</a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </nav>
+        </header>
+
+        <main class="hero">
+            <section class="bannerlanche">
+                <picture>
+                    <source class="media" srcset="/static/imagens/cardapio-media.png" media="(max-width: 768px)">
+                    <img src="/static/imagens/banner-cardapio.png" alt="Banner Catatau Lanches">
+                </picture>
+            </section>
+        </main>
+
+        <div class="menu-container">
+            <fieldset>
+                <legend>Sanduíches Especiais</legend>
+                
+                <div class="grid-sanduiches">
+
+                    <a href="/lanche/Whopper®Grogu">
+                        <div class="card-item">
+                            <span class="badge-novo">Novo</span>
+                            <div class="img-container">
+                                <img src="/static/imagens/lanches/Whopper Grogu.png" alt="Whopper Grogu">
+                            </div>
+                            <h3>Whopper® Grogu</h3>
+                        </div>
+                    </a>
+
+                    <a href="/lanche/King Fraldinha">
+                        <div class="card-item">
+                            <div class="img-container">
+                                <img src="/static/imagens/lanches/King Fraldinha.png" alt="King Fraldinha">
+                            </div>
+                            <h3>King Fraldinha</h3>
+                        </div>
+                    </a>
+                    
+                    <a href="/lanche/King Bacon">
+                        <div class="card-item">
+                            <div class="img-container">
+                                <img src="/static/imagens/lanches/King Bacon.png" alt="King Bacon">
+                            </div>
+                            <h3>King Bacon</h3>
+                        </div>
+                    </a>
+
+                    <a href="/lanche/King Duplo Bacon">
+                    <div class="card-item">
+                        <div class="img-container">
+                            <img src="/static/imagens/lanches/King Duplo Bacon.png" alt="King Duplo Bacon">
+                        </div>
+                        <h3>King Duplo Bacon</h3>
+                    </div>
+                    </a>
+
+                    <a href="/lanche/Clássico Catatau">
+                        <div class="card-item">
+                            <div class="img-container">
+                                <img src="/static/imagens/lanches/Clássico Catatau.png" alt="Classico Catatau">
+                            </div>
+                            <h3>Clássico Catatau</h3>
+                        </div>
+                    </a>
+
+                    <a href="/lanche/Whopper®Grogu">
+                        <div class="card-item">
+                            <!-- <span class="badge-novo">Novo</span>  Use isso quando for colocar uma etiqueta para um lanche diferente ou novo -->
+                            <div class="img-container">
+                                <img src="/static/imagens/lanches/Whopper Grogu.png" alt="Whopper Grogu">
+                            </div>
+                            <h3>Whopper® Grogu</h3>
+                        </div>
+                    </a>
+
+                    <a href="/lanche/King Fraldinha">
+                    <div class="card-item">
+                        <div class="img-container">
+                            <img src="/static/imagens/lanches/King Fraldinha.png" alt="King Fraldinha">
+                        </div>
+                        <h3>King Fraldinha</h3>
+                    </div>
+                    </a>
+                    
+                    <a href="/lanche/King Bacon">
+                    <div class="card-item">
+                        <div class="img-container">
+                            <img src="/static/imagens/lanches/King Bacon.png" alt="King Bacon">
+                        </div>
+                        <h3>King Bacon</h3>
+                    </div>
+                    </a>
+
+                    <a href="/lanche/King Duplo Bacon">
+                    <div class="card-item">
+                        <div class="img-container">
+                            <img src="/static/imagens/lanches/King Duplo Bacon.png" alt="King Duplo Bacon">
+                        </div>
+                        <h3>King Duplo Bacon</h3>
+                    </div>
+                    </a>
+
+                    <a href="/lanche/Clássico Catatau">
+                        <div class="card-item">
+                        <div class="img-container">
+                            <img src="/static/imagens/lanches/Clássico Catatau.png" alt="Classico Catatau">
+                        </div>
+                        <h3>Clássico Catatau</h3>
+                    </div>
+                    </a>
+
+                    <a href="/lanche/Whopper®Grogu">
+                        <div class="card-item">
+                            <div class="img-container">
+                                <img src="/static/imagens/lanches/Whopper Grogu.png" alt="Whopper Grogu">
+                            </div>
+                            <h3>Whopper® Grogu</h3>
+                        </div>
+                    </a>
+
+                    <a href="/lanche/King Fraldinha">
+                    <div class="card-item">
+                        <div class="img-container">
+                            <img src="/static/imagens/lanches/King Fraldinha.png" alt="King Fraldinha">
+                        </div>
+                        <h3>King Fraldinha</h3>
+                    </div>
+                    </a>
+                    
+                    <a href="/lanche/King Bacon">
+                    <div class="card-item">
+                        <div class="img-container">
+                            <img src="/static/imagens/lanches/King Bacon.png" alt="King Bacon">
+                        </div>
+                        <h3>King Bacon</h3>
+                    </div>
+                    </a>
+
+                    <a href="/lanche/King Duplo Bacon">
+                    <div class="card-item">
+                        <div class="img-container">
+                            <img src="/static/imagens/lanches/King Duplo Bacon.png" alt="King Duplo Bacon">
+                        </div>
+                        <h3>King Duplo Bacon</h3>
+                    </div>
+                    </a>
+
+                    <a href="/lanche/Clássico Catatau">
+                        <div class="card-item">
+                        <div class="img-container">
+                            <img src="/static/imagens/lanches/Clássico Catatau.png" alt="Classico Catatau">
+                        </div>
+                        <h3>Clássico Catatau</h3>
+                    </div>
+                    </a>
+                      
+                    <a href="/lanche/King Duplo Bacon">
+                    <div class="card-item">
+                        <div class="img-container">
+                            <img src="/static/imagens/lanches/King Duplo Bacon.png" alt="King Duplo Bacon">
+                        </div>
+                        <h3>King Duplo Bacon</h3>
+                    </div>
+                    </a>
+                    
+                </div>
+            </fieldset>
+        
+        </div>
+        <footer class="main-footer">
+                <div class="footer-container">
+                    <div class="footer-col">
+                        <h2 class="footer-logo">Catatau<span>Lanches</span></h2>
+                        <p>O verdadeiro podrão raiz desde 1992. Qualidade e tamanho que você conhece.</p>
+                    </div>
+
+                    <div class="footer-col">
+                        <h3>Navegação</h3>
+                        <ul>
+                            <li><a href="/cardapio">Cardápio</a></li>
+                            <li><a target="_blank" href="https://www.google.com/maps/place/Catatau+Lanches/@-21.1724811,-47.7973029,17z/data=!3m1!4b1!4m6!3m5!1s0x94b9bf0415c9171f:0xfafb21436bf0c0ac!8m2!3d-21.1724811!4d-47.7973029!16s%2Fg%2F1tgcs_33?entry=ttu&g_ep=EgoyMDI2MDUyNy4wIKXMDSoASAFQAw%3D%3D">Unidades</a></li>
+                            <li><a href="/contato">Sobre nós</a></li>
+                            <li><a href="#">Trabalhe Conosco</a></li>
+                        </ul>
+                    </div>
+
+                <div class="footer-col">
+                    <h3>Contato</h3>
+                    <p>📞 (16) 99999-9999</p>
+                    <p>📍 Ribeirão Preto, SP</p>
+                    <p>⏰ Dom a Qui: 18h - 00h</p>
+                    <p>⏰ Sex e Sáb: 18h - 04h</p>
+                </div>
+            </div>
+
+            <div class="footer-bottom">
+                <p>&copy; 2026 Catatau Lanches. Todos os direitos reservados.</p>
+            </div>
+        </footer>
+    </body>
+</html>    
