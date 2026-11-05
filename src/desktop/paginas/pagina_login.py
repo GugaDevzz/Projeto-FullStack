@@ -32,6 +32,9 @@ class CatatauLogin(ctk.CTk):
         self.montar_lado_esquerdo_banner()
         self.montar_lado_direito_login()
 
+        self.ent_user.bind("<Return>", self.acao_login)
+        self.ent_pass.bind("<Return>", self.acao_login)    
+
 
     def montar_lado_esquerdo_banner(self):
         """LADO ESQUERDO: Imagem de fundo com a logo sobreposta em camadas"""
@@ -168,7 +171,7 @@ class CatatauLogin(ctk.CTk):
             )
             self.btn_login.pack(fill="x", padx=45, pady=(0, 20))
 
-    def acao_login(self):
+    def acao_login(self, event=None):
          
         usuario = self.ent_user.get().strip()
         senha = self.ent_pass.get().strip()
@@ -197,10 +200,14 @@ class CatatauLogin(ctk.CTk):
                 self.ent_pass.configure(border_color="#FF3333")
                 return self.lbl_aviso.configure(text="Senha incorreta.")
 
+            if hasattr(usuario_db, "ativo") and not usuario_db.ativo:
+                self.ent_user.configure(border_color="#FF3333")
+                return self.lbl_aviso.configure(text="Usuário inativo. Contate o gerente.")
+
             self.destroy()   # Fecha a janela de login atual
             if usuario_db.controle == 1:
                 # Abre a pagina principal (paginaadm)
-                app_principal = PaginaADM()
+                app_principal = PaginaADM(usuario_atual=usuario_db.nome)
                 app_principal.mainloop()
             if usuario_db.controle == 2:    
                 # Abre a pagina principal (CozinhaApp)
@@ -208,5 +215,7 @@ class CatatauLogin(ctk.CTk):
                 app_principal.mainloop()
         finally:
             session.close()
+
+    
      
         

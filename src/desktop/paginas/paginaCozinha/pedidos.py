@@ -1,5 +1,6 @@
 import customtkinter as ctk
 from sqlalchemy.orm import joinedload
+from datetime import datetime
 # Importe suas sessões e modelos
 from DB.Banco import SessionLocal  # Ajuste conforme seu arquivo de conexão
 from DB.models import Pedido, ItemPedido, Produto, Ingredientes
@@ -265,6 +266,7 @@ class CozinhaApp(ctk.CTk):
 
         session = SessionLocal()
         try:
+            
             # Query garantindo o JOIN de Pedido -> ItemPedido -> Produto
             pedidos_ativos = session.query(Pedido).options(
                 joinedload(Pedido.itens).joinedload(ItemPedido.produto)
@@ -274,6 +276,25 @@ class CozinhaApp(ctk.CTk):
 
             total_hoje = session.query(Pedido).count()
             prontos_hoje = session.query(Pedido).filter(Pedido.status == "FINALIZADO").count()
+            
+            # Busca APENAS os últimos 10 pedidos concluídos (ordenados do mais recente para o mais antigo)
+            pedidos_concluidos = session.query(Pedido).filter(
+                Pedido.data_hora_inicio.isnot(None),
+                Pedido.data_hora_fim.isnot(None)
+            ).order_by(Pedido.id.desc()).limit(10).all()
+
+            if pedidos_concluidos:
+                # Calcula a diferença em minutos para esses últimos 10
+                tempos_minutos = [
+                    (p.data_hora_fim - p.data_hora_inicio).total_seconds() / 60.0 
+                    for p in pedidos_concluidos
+                ]
+                media_prep = sum(tempos_minutos) / len(tempos_minutos)
+                texto_media = f"{round(media_prep)} min"
+            else:
+                texto_media = "-- min"
+            # Atualiza o label do painel estatístico
+            self.lbl_tempo_medio.configure(text=texto_media)
             
             self.lbl_total_pedidos.configure(text=str(total_hoje))
             self.lbl_prontos.configure(text=str(prontos_hoje))
@@ -340,6 +361,12 @@ class CozinhaApp(ctk.CTk):
             pedido = session.query(Pedido).filter(Pedido.id == pedido_id).first()
             if pedido:
                 pedido.status = novo_status
+
+                if novo_status == "PREPARANDO":
+                    pedido.data_hora_inicio = datetime.now()
+                elif novo_status == "FINALIZADO":
+                    pedido.data_hora_fim = datetime.now()
+
                 session.commit()
                 self.carregar_pedidos()  # Recarrega a interface com os dados atualizados
         except Exception as e:

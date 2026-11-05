@@ -12,7 +12,7 @@ class ModalItemEstoque(ctk.CTkToplevel):
 
         # Configurações do Pop-up Modal
         self.title("Editar Item" if item_dados else "Adicionar Novo Item")
-        self.geometry("400x320")
+        self.geometry("400x260")
         self.configure(fg_color="#F3EBE1")
         self.resizable(False, False)
         
@@ -35,21 +35,10 @@ class ModalItemEstoque(ctk.CTkToplevel):
         self.entry_qtd = ctk.CTkEntry(self, placeholder_text="Quantidade (ex: 15)", width=320)
         self.entry_qtd.pack(pady=8)
 
-        self.combo_status = ctk.CTkOptionMenu(
-            self, 
-            values=["Ok", "Atenção", "Crítico"],
-            width=320,
-            fg_color="#3A1A10",
-            button_color="#52291B",
-            dropdown_fg_color="#F3EBE1"
-        )
-        self.combo_status.pack(pady=8)
-
         # Se for EDIÇÃO, preenche os campos com os dados existentes
         if item_dados:
             self.entry_nome.insert(0, item_dados["nome"])
-            self.entry_qtd.insert(0, item_dados["qtd"])
-            self.combo_status.set(item_dados["status"])
+            self.entry_qtd.insert(0, str(item_dados["qtd"]))
 
         # Botão Salvar
         ctk.CTkButton(
@@ -66,14 +55,12 @@ class ModalItemEstoque(ctk.CTkToplevel):
     def salvar(self):
         nome = self.entry_nome.get()
         qtd = self.entry_qtd.get()
-        status = self.combo_status.get()
 
         if not nome or not qtd:
             return  # Evita salvar se estiver vazio
 
-        # Retorna os dados para a tela principal
         if self.callback_salvar:
-            self.callback_salvar(nome, qtd, status, self.item_dados)
+            self.callback_salvar(nome, qtd, self.item_dados)
 
         self.destroy()
 
@@ -112,6 +99,53 @@ class EstoqueView(ctk.CTkFrame):
         # Carrega do banco e renderiza os itens na tela
         self.atualizar_lista()
 
+    def calcular_status_automatico(self, nome, qtd):
+        """Calcula o status com base na unidade extraída do nome e nas regras de quantidade."""
+        try:
+            qtd_float = float(qtd)
+        except ValueError:
+            return "Ok"
+
+        nome_lower = nome.lower()
+
+        # Unidades (uni.) -> < 15: Crítico | 15 a 50: Atenção | > 50: Ok
+        if "uni" in nome_lower:
+            if qtd_float < 15:
+                return "Crítico"
+            elif qtd_float <= 50:
+                return "Atenção"
+            else:
+                return "Ok"
+        
+        # Fatias (fatia/fatias) -> < 20: Crítico | 20 a 60: Atenção | > 60: Ok
+        elif "fatia" in nome_lower:
+            if qtd_float < 20:
+                return "Crítico"
+            elif qtd_float <= 60:
+                return "Atenção"
+            else:
+                return "Ok"
+        
+        # Quilogramas (kg) -> < 1.0: Crítico | 1.0 a 3.0: Atenção | > 3.0: Ok
+        elif "kg" in nome_lower:
+            if qtd_float < 0.5:
+                return "Crítico"
+            elif qtd_float <= 1.2:
+                return "Atenção"
+            else:
+                return "Ok"
+        
+        # Gramas (g) -> < 200: Crítico | 200 a 600: Atenção | > 600: Ok
+        elif "g" in nome_lower:
+            if qtd_float < 200:
+                return "Crítico"
+            elif qtd_float <= 600:
+                return "Atenção"
+            else:
+                return "Ok"
+        
+        return "Ok"
+
     def get_cor_status(self, status):
         coreshash = {
             "Crítico": "#D97706",
@@ -121,19 +155,20 @@ class EstoqueView(ctk.CTkFrame):
         return coreshash.get(status, "#000000")
 
     def carregar_do_banco(self):
-        """Busca os itens diretamente na tabela 'estoque' do banco de dados"""
+        """Busca os itens diretamente na tabela 'ingredientes' do banco de dados"""
         session = Session()
         try:
             resultados = session.query(Ingredientes).all()
             self.itens_estoque = []
             for item in resultados:
-                # Separamos o nome e a unidade caso queira exibir formatado, 
-                # ou salvamos inteiro se preferir. Aqui mantemos como string direta.
+                qtd_val = round(float(item.quantidade), 2)
+                status_calculado = self.calcular_status_automatico(item.nome, qtd_val)
+                
                 self.itens_estoque.append({
                     "id": item.id,
                     "nome": item.nome, 
-                    "qtd": round(float(item.quantidade), 2),
-                    "status": item.status
+                    "qtd": qtd_val,
+                    "status": status_calculado
                 })
         except Exception as e:
             print(f"Erro ao carregar estoque do banco: {e}")
@@ -142,14 +177,11 @@ class EstoqueView(ctk.CTkFrame):
             session.close()
 
     def atualizar_lista(self):
-        # Atualiza a lista interna buscando do banco de dados
         self.carregar_do_banco()
 
-        # Limpa os widgets antigos da tela
         for widget in self.scroll.winfo_children():
             widget.destroy()
 
-        # Renderiza cada item na interface
         for item in self.itens_estoque:
             row = ctk.CTkFrame(self.scroll, fg_color="#F9F9F9", height=40)
             row.pack(fill="x", pady=4, padx=5)
@@ -161,7 +193,7 @@ class EstoqueView(ctk.CTkFrame):
             ).pack(side="left", padx=15)
 
             ctk.CTkLabel(
-                row, text=item["qtd"], 
+                row, text=str(item["qtd"]), 
                 font=ctk.CTkFont(size=12), 
                 text_color="#000", width=100
             ).pack(side="left", padx=15)
@@ -172,7 +204,6 @@ class EstoqueView(ctk.CTkFrame):
                 text_color=self.get_cor_status(item["status"]), width=100
             ).pack(side="left", padx=15)
 
-            # Botão Editar ligado à função do Modal repassando o item atual
             ctk.CTkButton(
                 row, 
                 text="Editar", 
@@ -190,23 +221,24 @@ class EstoqueView(ctk.CTkFrame):
     def abrir_modal_editar(self, item):
         ModalItemEstoque(self, item_dados=item, callback_salvar=self.salvar_item)
 
-    def salvar_item(self, nome, qtd, status, item_original=None):
+    def salvar_item(self, nome, qtd, item_original=None):
         session = Session()
         try:
+            qtd_formatada = round(float(qtd), 2)
+            status_calculado = self.calcular_status_automatico(nome, qtd_formatada)
+
             if item_original:
-                # Edição: busca o registro no banco pelo ID e atualiza
                 item_db = session.query(Ingredientes).filter_by(id=item_original["id"]).first()
                 if item_db:
                     item_db.nome = nome
-                    item_db.quantidade = round(float(qtd), 2)
-                    item_db.status = status
+                    item_db.quantidade = qtd_formatada
+                    item_db.status = status_calculado
                     session.commit()
             else:
-                # Criação: adiciona um novo registro no banco
                 novo_item = Ingredientes(
                     nome=nome,
-                    quantidade=round(float(qtd), 2),
-                    status=status
+                    quantidade=qtd_formatada,
+                    status=status_calculado
                 )
                 session.add(novo_item)
                 session.commit()
@@ -216,5 +248,4 @@ class EstoqueView(ctk.CTkFrame):
         finally:
             session.close()
 
-        # Recarrega a tabela diretamente do banco na tela
         self.atualizar_lista()

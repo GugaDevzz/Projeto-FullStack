@@ -134,7 +134,6 @@ class PedidosView(ctk.CTkFrame):
     def __init__(self, parent):
         super().__init__(parent, fg_color="#FFFFFF", corner_radius=15)
         
-        # Cria a sessão do banco diretamente aqui dentro
         self.session = SessionLocal()
 
         ctk.CTkLabel(
@@ -144,13 +143,21 @@ class PedidosView(ctk.CTkFrame):
             text_color="#3A1A10"
         ).pack(anchor="w", padx=20, pady=15)
 
-        # Tabela com Scroll
-        scroll = ctk.CTkScrollableFrame(self, fg_color="transparent")
-        scroll.pack(fill="both", expand=True, padx=15, pady=(0, 15))
+        # Container com Scroll
+        self.scroll = ctk.CTkScrollableFrame(self, fg_color="transparent")
+        self.scroll.pack(fill="both", expand=True, padx=15, pady=(0, 15))
+
+        # Chama a função que carrega a tabela pela primeira vez
+        self.carregar_pedidos()
+
+    def carregar_pedidos(self):
+        # Limpa caso já tenha algo (para o botão atualizar funcionar)
+        for child in self.scroll.winfo_children():
+            child.destroy()
 
         # Cabeçalhos
         headers = ["ID", "Mesa", "Cliente", "Itens", "Total", "Status", "Ação"]
-        h_frame = ctk.CTkFrame(scroll, fg_color="#F3EBE1", height=30)
+        h_frame = ctk.CTkFrame(self.scroll, fg_color="#F3EBE1", height=30)
         h_frame.pack(fill="x", pady=2)
         for h in headers:
             ctk.CTkLabel(
@@ -161,11 +168,11 @@ class PedidosView(ctk.CTkFrame):
                 width=100
             ).pack(side="left", expand=True)
 
-        # Busca pedidos diretamente do banco
+        # Busca pedidos do banco
         pedidos = self.session.query(Pedido).order_by(Pedido.id.desc()).all()
 
         for p in pedidos:
-            row = ctk.CTkFrame(scroll, fg_color="#F9F9F9", height=35)
+            row = ctk.CTkFrame(self.scroll, fg_color="#F9F9F9", height=35)
             row.pack(fill="x", pady=2)
 
             total_itens = sum(item.quantidade for item in p.itens) if p.itens else 0
@@ -196,10 +203,12 @@ class PedidosView(ctk.CTkFrame):
                 command=lambda p_id=p.id: self.abrir_detalhes(p_id)
             )
             btn_detalhes.pack(side="left", expand=True)
+
     def abrir_detalhes(self, pedido_id):
-        DetalhesPedidoModal(self, self.session, pedido_id)
+        modal = DetalhesPedidoModal(self, self.session, pedido_id)
+        self.wait_window(modal)
+        self.carregar_pedidos()
 
     def destroy(self):
-        # Garante o fechamento da sessão ao fechar o frame
         self.session.close()
         super().destroy()

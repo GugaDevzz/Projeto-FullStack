@@ -72,20 +72,140 @@ def pagina_contato(request: Request):
         request=request,
         name="contato/sobre-nos.html"
     )
+
+@app.get("/cupons")
+@app.get("/cupom")
+def pagina_cupons(
+    request: Request,
+    novo: Annotated[str | None, Query()] = None,
+    db: Session = Depends(get_db)
+):
+    user_id = request.cookies.get("user_id")
+    usuario_banco = None
+    if user_id and user_id.isdigit():
+        usuario_banco = db.query(Cliente).filter(Cliente.id == int(user_id)).first()
+
+    cupom_usado = False
+    cupom_disponivel = False
+
+    if usuario_banco:
+        cupom_usado = bool(usuario_banco.cupom_usado)
+        cupom_disponivel = not cupom_usado
+
+    return templates.TemplateResponse(
+        request=request,
+        name="cupons.html",
+        context={
+            "page_user": usuario_banco,
+            "usuario": usuario_banco,
+            "cupom_disponivel": cupom_disponivel,
+            "cupom_usado": cupom_usado,
+            "codigo_cupom": "BEMVINDO30",
+            "desconto_percentual": 30,
+            "novo_cadastro": (novo == "true")
+        }
+    )
+
+@app.post("/api/validar-cupom")
+def api_validar_cupom(
+    request: Request,
+    cupom: str = Form(...),
+    db: Session = Depends(get_db)
+):
+    user_id = request.cookies.get("user_id")
+    usuario_banco = None
+    if user_id and user_id.isdigit():
+        usuario_banco = db.query(Cliente).filter(Cliente.id == int(user_id)).first()
+
+    cupom_limpo = cupom.strip().upper() if cupom else ""
+
+    if not usuario_banco:
+        return {
+            "sucesso": False,
+            "precisa_login": True,
+            "mensagem": "Para usar o cupom de boas-vindas de 30%, você precisa criar uma conta ou fazer login no Catatau Lanches!"
+        }
+
+    if cupom_limpo not in ["BEMVINDO30", "CATATAU30"]:
+        return {
+            "sucesso": False,
+            "precisa_login": False,
+            "mensagem": "Cupom inválido ou não encontrado."
+        }
+
+    if usuario_banco.cupom_usado:
+        return {
+            "sucesso": False,
+            "precisa_login": False,
+            "mensagem": "Este cupom de 30% é exclusivo para novos clientes e você já o utilizou na sua primeira compra!"
+        }
+
+    total = carregar_carrinho_do_cookie(request, db)
+    if total <= 0:
+        return {
+            "sucesso": False,
+            "precisa_login": False,
+            "mensagem": "Adicione itens ao carrinho antes de aplicar o cupom."
+        }
+
+    desconto = round(total * 0.30, 2)
+    total_com_desconto = max(0.0, round(total - desconto, 2))
+
+    return {
+        "sucesso": True,
+        "codigo": cupom_limpo,
+        "desconto_percentual": 30,
+        "subtotal": total,
+        "valor_desconto": desconto,
+        "total_final": total_com_desconto,
+        "mensagem": "Cupom BEMVINDO30 aplicado! 30% de desconto garantido."
+    }
+
 @app.get("/checkout")
 def pagina_checkout(
     request: Request,
+    cupom: Annotated[str | None, Query()] = None,
     db: Session = Depends(get_db)
 ):
-    # Carrega os itens do carrinho
     itens_carrinho, total = carregar_carrinho_do_cookie(request, db)
     
-    # Pega o user_id diretamente do cookie da requisição (igualzinho na rota /catatau)
     user_id = request.cookies.get("user_id")
     usuario_banco = None
-    
-    if user_id:
+    if user_id and user_id.isdigit():
         usuario_banco = db.query(Cliente).filter(Cliente.id == int(user_id)).first()
+
+    cupom_elegivel = False
+    if usuario_banco and not usuario_banco.cupom_usado:
+        cupom_elegivel = True
+
+    cupom_aplicado = None
+    desconto = 0.0
+    total_final = total
+    mensagem_cupom = None
+    tipo_msg_cupom = None
+    precisa_login = False
+
+    if cupom:
+        cupom_limpo = cupom.strip().upper()
+        if not usuario_banco:
+            mensagem_cupom = "Para usar o cupom de boas-vindas de 30%, você precisa criar uma conta ou fazer login no Catatau Lanches!"
+            tipo_msg_cupom = "info"
+            precisa_login = True
+        elif cupom_limpo not in ["BEMVINDO30", "CATATAU30"]:
+            mensagem_cupom = "Cupom inválido ou não encontrado."
+            tipo_msg_cupom = "erro"
+        elif usuario_banco.cupom_usado:
+            mensagem_cupom = "Este cupom de 30% é exclusivo para a 1ª compra e você já o utilizou!"
+            tipo_msg_cupom = "erro"
+        elif total <= 0:
+            mensagem_cupom = "Adicione itens ao carrinho antes de aplicar o cupom."
+            tipo_msg_cupom = "erro"
+        else:
+            desconto = round(total * 0.30, 2)
+            total_final = max(0.0, round(total - desconto, 2))
+            cupom_aplicado = cupom_limpo
+            mensagem_cupom = f"✓ Cupom {cupom_limpo} aplicado com sucesso! 30% de desconto garantido."
+            tipo_msg_cupom = "sucesso"
 
     return templates.TemplateResponse(
         request=request,
@@ -93,15 +213,143 @@ def pagina_checkout(
         context={
             "carrinho": itens_carrinho,
             "total_carrinho": total,
-            "page_user": usuario_banco, # <- Certifique-se que no HTML o campo usa essa variável
+            "total_final": total_final,
+            "desconto": desconto,
+            "cupom_aplicado": cupom_aplicado,
+            "mensagem_cupom": mensagem_cupom,
+            "tipo_msg_cupom": tipo_msg_cupom,
+            "precisa_login": precisa_login,
+            "page_user": usuario_banco,
+            "usuario": usuario_banco,
+            "cupom_elegivel": cupom_elegivel,
+            "codigo_cupom": "BEMVINDO30"
         }
     )
+
+@app.post("/checkout/aplicar")
+def aplicar_cupom_checkout(
+    request: Request,
+    cliente: Optional[str] = Form(None),
+    mesa: Optional[str] = Form(None),
+    descricao: Optional[str] = Form(None),
+    cupom: Optional[str] = Form(None),
+    db: Session = Depends(get_db)
+):
+    itens_carrinho, total = carregar_carrinho_do_cookie(request, db)
+    
+    user_id = request.cookies.get("user_id")
+    usuario_banco = None
+    if user_id and user_id.isdigit():
+        usuario_banco = db.query(Cliente).filter(Cliente.id == int(user_id)).first()
+
+    cupom_elegivel = False
+    if usuario_banco and not usuario_banco.cupom_usado:
+        cupom_elegivel = True
+
+    cupom_aplicado = None
+    desconto = 0.0
+    total_final = total
+    mensagem_cupom = None
+    tipo_msg_cupom = None
+    precisa_login = False
+
+    if cupom and cupom.strip():
+        cupom_limpo = cupom.strip().upper()
+        if not usuario_banco:
+            mensagem_cupom = "Para usar o cupom de boas-vindas de 30%, você precisa criar uma conta ou fazer login no Catatau Lanches!"
+            tipo_msg_cupom = "info"
+            precisa_login = True
+        elif cupom_limpo not in ["BEMVINDO30", "CATATAU30"]:
+            mensagem_cupom = "Cupom inválido ou não encontrado."
+            tipo_msg_cupom = "erro"
+        elif usuario_banco.cupom_usado:
+            mensagem_cupom = "Este cupom de 30% é exclusivo para novos clientes e você já o utilizou na sua primeira compra!"
+            tipo_msg_cupom = "erro"
+        elif total <= 0:
+            mensagem_cupom = "Adicione itens ao carrinho antes de aplicar o cupom."
+            tipo_msg_cupom = "erro"
+        else:
+            desconto = round(total * 0.30, 2)
+            total_final = max(0.0, round(total - desconto, 2))
+            cupom_aplicado = cupom_limpo
+            mensagem_cupom = f"✓ Cupom {cupom_limpo} aplicado com sucesso! 30% de desconto garantido."
+            tipo_msg_cupom = "sucesso"
+    else:
+        mensagem_cupom = "Digite o código de um cupom para aplicar."
+        tipo_msg_cupom = "erro"
+
+    usuario_dados = {"nome": cliente} if cliente else usuario_banco
+
+    return templates.TemplateResponse(
+        request=request,
+        name="checkout.html",
+        context={
+            "carrinho": itens_carrinho,
+            "total_carrinho": total,
+            "total_final": total_final,
+            "desconto": desconto,
+            "cupom_aplicado": cupom_aplicado,
+            "mensagem_cupom": mensagem_cupom,
+            "tipo_msg_cupom": tipo_msg_cupom,
+            "precisa_login": precisa_login,
+            "page_user": usuario_banco,
+            "usuario": usuario_dados,
+            "mesa": mesa,
+            "descricao": descricao,
+            "cupom_elegivel": cupom_elegivel,
+            "codigo_cupom": "BEMVINDO30"
+        }
+    )
+
+@app.post("/checkout/remover")
+def remover_cupom_checkout(
+    request: Request,
+    cliente: Optional[str] = Form(None),
+    mesa: Optional[str] = Form(None),
+    descricao: Optional[str] = Form(None),
+    db: Session = Depends(get_db)
+):
+    itens_carrinho, total = carregar_carrinho_do_cookie(request, db)
+    
+    user_id = request.cookies.get("user_id")
+    usuario_banco = None
+    if user_id and user_id.isdigit():
+        usuario_banco = db.query(Cliente).filter(Cliente.id == int(user_id)).first()
+
+    cupom_elegivel = False
+    if usuario_banco and not usuario_banco.cupom_usado:
+        cupom_elegivel = True
+
+    usuario_dados = {"nome": cliente} if cliente else usuario_banco
+
+    return templates.TemplateResponse(
+        request=request,
+        name="checkout.html",
+        context={
+            "carrinho": itens_carrinho,
+            "total_carrinho": total,
+            "total_final": total,
+            "desconto": 0.0,
+            "cupom_aplicado": None,
+            "mensagem_cupom": None,
+            "tipo_msg_cupom": None,
+            "precisa_login": False,
+            "page_user": usuario_banco,
+            "usuario": usuario_dados,
+            "mesa": mesa,
+            "descricao": descricao,
+            "cupom_elegivel": cupom_elegivel,
+            "codigo_cupom": "BEMVINDO30"
+        }
+    )
+
 @app.post("/checkout/enviar")
 def enviar_pedido_cozinha(
     request: Request,
     mesa: str = Form(...),
     cliente: str = Form(...),
-    descricao: Optional[str] = Form(None),  # <--- RECEBE A DESCRIÇÃO / OBSERVAÇÃO
+    descricao: Optional[str] = Form(None),
+    cupom: Optional[str] = Form(None),
     db: Session = Depends(get_db)
 ):
     itens_carrinho, total = carregar_carrinho_do_cookie(request, db)
@@ -109,19 +357,39 @@ def enviar_pedido_cozinha(
     if not itens_carrinho:
         return RedirectResponse(url="/cardapio", status_code=status.HTTP_303_SEE_OTHER)
 
+    user_id = request.cookies.get("user_id")
+    usuario_banco = None
+    if user_id and user_id.isdigit():
+        usuario_banco = db.query(Cliente).filter(Cliente.id == int(user_id)).first()
+
+    desconto = 0.0
+    info_cupom = ""
+
+    if cupom:
+        cupom_limpo = cupom.strip().upper()
+        if cupom_limpo in ["BEMVINDO30", "CATATAU30"]:
+            if usuario_banco and not usuario_banco.cupom_usado:
+                desconto = round(total * 0.30, 2)
+                usuario_banco.cupom_usado = True
+                info_cupom = f" [Cupom {cupom_limpo} (-30%): -R$ {desconto:.2f}]"
+
+    total_final = max(0.0, round(total - desconto, 2))
+    descricao_final = f"{(descricao or '').strip()}{info_cupom}".strip()
+
+    # Cria o pedido para a cozinha
     novo_pedido = Pedido(
         nome_cliente=cliente,
         num_mesa=int(mesa) if mesa.isdigit() else 0,
-        descricao=descricao,  # <--- SALVA A DESCRIÇÃO NO BANCO DE DADOS
+        descricao=descricao_final if descricao_final else None,
         status="ESPERANDO",
-        valor_final=total
+        valor_final=total_final
     )
 
     db.add(novo_pedido)
     db.commit()
-    db.refresh(novo_pedido) # Atualiza para obter o ID gerado
+    db.refresh(novo_pedido)
 
-    # Salva os itens do carrinho corretamente
+    # Salva os itens do carrinho e desconta do estoque (sua lógica atual)
     for item in itens_carrinho:
         prod_id = item["id"] if isinstance(item, dict) else item.id
         qtd = item["quantidade"] if isinstance(item, dict) else item.quantidade
@@ -133,7 +401,6 @@ def enviar_pedido_cozinha(
         )
         db.add(item_bd)
 
-        #aqui estou descontando os ingredientes de cada lanches na tabela de ingredientes
         associacoes_estoque = db.query(ProdutoEstoque).filter(ProdutoEstoque.fk_id_produto == prod_id).all()
         for assoc in associacoes_estoque:
             ingrediente = db.query(Ingrediente).filter(Ingrediente.id == assoc.fk_id_estoque).first()
@@ -141,7 +408,19 @@ def enviar_pedido_cozinha(
                 total_gasto = assoc.quantidade_necessaria * qtd
                 ingrediente.quantidade -= total_gasto
 
-    db.commit() # Salva todos os ItemPedido no banco
+    # --- O PULO DO GATO PARA O CPF / PEDIDOS COUNT ---
+    # Se o usuário estiver logado, incrementamos direto na coluna dele baseada no ID/CPF dele
+    if usuario_banco:
+        # Garante que incrementa de forma segura
+        usuario_banco.pedidos_count = (usuario_banco.pedidos_count or 0) + 1
+    else:
+        # Caso ele tenha preenchido o nome/CPF no checkout sem estar logado na sessão web, 
+        # podemos tentar achar pelo CPF digitado no input do form se houver:
+        cliente_por_cpf = db.query(Cliente).filter(Cliente.cpf == cliente).first() # Ajuste se o campo do form for o CPF
+        if cliente_por_cpf:
+            cliente_por_cpf.pedidos_count = (cliente_por_cpf.pedidos_count or 0) + 1
+
+    db.commit() # Salva todas as alterações (itens, estoque e o contador do cliente)
 
     response = RedirectResponse(url="/catatau?enviado=true", status_code=status.HTTP_303_SEE_OTHER)
     response.delete_cookie(key="carrinho_catatau")    
@@ -225,12 +504,13 @@ def pagina_profile(
 
     # Monta o dicionário com as informações trazidas da tabela Cliente
     dados_usuario = {
-        "nome": usuario_db.nome,
-        "email": usuario_db.email,
-        "cpf": usuario_db.cpf,
-        "telefone": usuario_db.telefone,
+        "nome": usuario_db.nome if usuario_db else nome,
+        "email": usuario_db.email if usuario_db else "",
+        "cpf": usuario_db.cpf if usuario_db else "",
+        "telefone": usuario_db.telefone if usuario_db else "",
         "data_nascimento": "Não informado",
         "genero": "Não informado",
+        "cupom_usado": bool(usuario_db.cupom_usado) if usuario_db else False
     }
     
     # Renderiza a tela usuarios/user.html preenchendo a tabela
@@ -324,26 +604,28 @@ def cadastrar_usuario(
         email=email,
         cpf=CPF,
         telefone=telefone_completo,  # Salvando o telefone unificado
-        senha=senha
+        senha=senha,
+        cupom_usado=False
     )
 
     db.add(novo_usuario)
     db.commit()
+    db.refresh(novo_usuario)
 
-    #lista apontada para user.html, jinja acionado com {{}}
-    dados_usuario = {
-        "nome": nome,
-        "cpf": CPF,
-        "email": email,
-        "telefone": telefone_completo,
-        "data_nascimento": "Não informado", 
-        "genero": "Não informado"
-    }
-
-    return RedirectResponse(
-        url=f"/usuario/{nome}", 
-        status_code=status.HTTP_303_SEE_OTHER # nao é necessário colocar esse, vai rodar sem tambem!
+    # Redireciona o novo usuário direto para a aba de cupons com celebração
+    response = RedirectResponse(
+        url="/cupons?novo=true", 
+        status_code=status.HTTP_303_SEE_OTHER
     )
+    # Grava o cookie de login para o usuário já entrar logado
+    response.set_cookie(
+        key="user_id",
+        value=str(novo_usuario.id),
+        httponly=True,
+        max_age=3600,
+        samesite="lax"
+    )
+    return response
 
 
 @app.post("/carrinho/atualizar")

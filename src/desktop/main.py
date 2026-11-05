@@ -5,7 +5,7 @@ from paginas.pagina_login import CatatauLogin
 
 def main():
 
-    ctk.set_appearance_mode("blue")
+    ctk.set_appearance_mode("blue") 
 
     app = CatatauLogin()
 

@@ -1,14 +1,15 @@
-from sqlalchemy import Column, Integer, String, Float, ForeignKey
+from sqlalchemy import Column, Integer, String, Float, ForeignKey, DateTime, Boolean
 from DB.Banco import Base
 from sqlalchemy.orm import relationship
 
 class Funcionario(Base):
     __tablename__ = "funcionario"
     
-    id = Column(Integer, primary_key=True, autoincrement=True)
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     nome = Column(String(100), nullable=False)
     senha = Column(String(255), nullable=False)
-    controle = Column(Integer, nullable=False)
+    controle = Column(Integer, nullable=False)  # 1 para Administrador, 2 para Cozinha
+    ativo = Column(Boolean, nullable=False, default=True)
 
 class Cliente(Base):
     __tablename__ = "cliente"
@@ -19,6 +20,8 @@ class Cliente(Base):
     cpf = Column(String(255), nullable=False)
     telefone = Column(String(20), unique=True)
     senha = Column(String(255), nullable=False)
+    cupom_usado = Column(Boolean, default=False, nullable=False)
+    pedidos_count = Column(Integer, default=0, nullable=False)
 
 class Pedido(Base):
     __tablename__ = "pedido"
@@ -29,6 +32,8 @@ class Pedido(Base):
     valor_final = Column(Float, default=0.0)
     nome_cliente = Column(String(100), nullable=True)
     descricao = Column(String(255), nullable=True) 
+    data_hora_inicio = Column(DateTime, nullable=True)
+    data_hora_fim = Column(DateTime, nullable=True)
 
     # Relacionamento com itens do pedido
     itens = relationship("ItemPedido", back_populates="pedido", cascade="all, delete-orphan")
@@ -84,3 +89,19 @@ class Ingredientes(Base):
 
     # Relacionamento reverso para a tabela associativa
     produtos_utilizados = relationship("ProdutoEstoque", back_populates="ingrediente", cascade="all, delete-orphan")
+
+
+class Cupom(Base):
+    __tablename__ = 'Cupom'
+
+    id = Column('ID', Integer, primary_key=True, autoincrement=True)
+    codigo = Column('Codigo', String(100), nullable=False)
+    desconto = Column('Desconto', String(150))
+    controle = Column('Controle', Boolean, server_default='1')
+
+
+    #criar nova tabela tempos com duas colunas, inicio e fim, fazer com que quando a cozinha clicar em iniciar pedido começa a contagem na 
+    #coluna inicio, e la fica printado o horario que começou, quando finalizar o pedido ent para o tempo e printa quanto parou direto na
+    #coluna fim, depois na pagina de historico apresentando junto com em cada pedido o horario de termino, depois pega todos que existem e
+    # faz a media.
+    # fazer direto no itens pedido, pois o horario de inicio e termino vem junto 

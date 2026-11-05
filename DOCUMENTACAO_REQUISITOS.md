@@ -449,3 +449,107 @@ Para obter nota máxima na defesa do Projeto Integrador perante a banca avaliado
 3. **Módulo de Cupons Conectado ao Checkout:** Conectar os cupons cadastrados no desktop para que o cliente possa inseri-los no formulário de checkout web e receber desconto automático no valor total.
 4. **Integração com Gateway de Pagamento:** Adição de geração de QR Code dinâmico do PIX (via API Mercado Pago ou similar) na tela de confirmação de pedido.
 5. **Comunicação Segura de Produção:** Migração do arquivo de configuração de banco de dados (`Banco.py`) para carregamento de variáveis de ambiente (`.env` com `python-dotenv`), ocultando credenciais e caminhos do repositório público.
+
+
+---
+
+## 11. Plano e Implementacao da Suite de Testes Automatizados (Pytest)
+
+### 11.1. Visao Geral da Estrategia de Testes
+
+**Versao 2.0 do documento — adicionada em novembro de 2026.**
+
+Com a maturidade do sistema, foi implementada uma suite de testes automatizados utilizando **Pytest** como framework central. A estrategia adota os principios de **TDD (Test-Driven Development)** retroativo, cobrindo as regras de negocio criticas ja implementadas no codigo-fonte.
+
+**Principio fundamental:** os testes NAO dependem do SQL Server de producao. Um banco SQLite em memoria e provisionado automaticamente pelo conftest.py a cada execucao, garantindo isolamento total e portabilidade.
+
+### 11.2. Configuracao da Suite (pytest.ini)
+
+O arquivo pytest.ini na raiz do repositorio centraliza toda a configuracao:
+
+`ini
+[pytest]
+pythonpath = src
+testpaths = tests
+addopts = -v -s --cov=src --cov-report=term-missing
+markers =
+    lento: marca testes demorados
+    integracao: marca testes de subsistemas
+`
+
+A diretiva pythonpath = src permite que os modulos API.* e Desktop.* sejam importados diretamente nos testes sem configuracao adicional de PYTHONPATH no ambiente.
+
+### 11.3. Arquitetura dos Fixtures (conftest.py)
+
+| Fixture | Escopo | Responsabilidade |
+| :--- | :--- | :--- |
+| pi_base_and_models | session | Cria engine SQLite, injeta modulo database.Banco falso, carrega database.Tabelas, cria tabelas ORM |
+| db_session | function | Sessao isolada com rollback apos cada teste |
+| pi_client | function | TestClient FastAPI com dependency_overrides para substituir get_db |
+| cliente_factory | function | Factory para criacao de registros de Cliente |
+| produto_factory | function | Factory para criacao de Produtos (lanches) |
+| ingrediente_factory | function | Factory para criacao de Ingredientes de estoque |
+| produto_estoque_factory | function | Factory para vincular Produto a Ingrediente (ficha tecnica) |
+| pedido_factory | function | Factory para criacao de Pedidos em qualquer status |
+| carrinho_cookie | function | Helper para serializar dict de itens no formato JSON do cookie |
+
+### 11.4. Cobertura por Requisito Funcional
+
+| Requisito | Descricao | Bloco de Testes | Metrica |
+| :--- | :--- | :--- | :--- |
+| **RF02** | Gestao de Carrinho via Cookies | TestCarrinhoSerializacao | 8 testes |
+| **RF03** | Cadastro de Clientes | TestCadastroCliente | 6 testes |
+| **RF04** | Autenticacao de Cliente Web | TestAutenticacaoClienteWeb | 4 testes |
+| **RF05** | Checkout e Envio do Pedido | TestFluxoCheckout, TestEndpointsAPI | 10 + 3 testes |
+| **RF06** | Baixa Automatica de Estoque | TestBaixaAutomaticaEstoque | 4 testes |
+| **RF07** | Autenticacao Desktop com Niveis | TestAutorizacaoFuncionario | 7 testes |
+| **RF09** | Transicao de Status do Pedido | TestTransicaoStatusPedido | 7 testes |
+| **RF13** | CRUD de Estoque e Status | TestCalculoStatusEstoque | 15 testes |
+| **RF15** | Cupom de Desconto | TestCupomDesconto | 10 testes |
+| *Modelos* | Persistencia ORM | TestModelosORM | 7 testes |
+| *Contagem* | Pedidos do Cliente | TestContagemPedidosCliente | 4 testes |
+
+### 11.5. Cobertura por Regra de Negocio
+
+| Regra | Descricao | Teste(s) Correspondente(s) |
+| :--- | :--- | :--- |
+| **RN01** | Carrinho via cookie JSON sem banco | TestCarrinhoSerializacao completo |
+| **RN02** | Checkout bloqueado com carrinho vazio | 	est_pedido_sem_itens_nao_deve_ser_enviado, 	est_checkout_carrinho_vazio_redireciona |
+| **RN03** | Atomicidade da baixa de estoque | TestBaixaAutomaticaEstoque completo |
+| **RN04** | Maquina de estados sequencial | TestTransicaoStatusPedido.test_sequencia_completa_de_transicoes |
+| **RN05** | Segregacao de papeis no desktop | TestAutorizacaoFuncionario completo |
+| **RN06** | Unicidade de Nome/CPF/Email | TestCadastroCliente.test_nome_duplicado_detectado, 	est_cpf_duplicado_detectado |
+| **RN07** | Status visual de estoque por limiar | TestCalculoStatusEstoque completo (15 testes) |
+
+### 11.6. Como Executar os Testes
+
+`ash
+# Instalacao das dependencias globais (inclui pytest e pytest-cov)
+pip install -r requirements.txt
+
+# Execucao completa da suite com relatorio de cobertura
+pytest
+
+# Execucao de um bloco especifico
+pytest tests/test_servico.py::TestBaixaAutomaticaEstoque -v
+pytest tests/test_servico.py::TestEndpointsAPI -v
+pytest tests/test_servico.py::TestCalculoStatusEstoque -v
+
+# Apenas testes rapidos (sem marcador 'lento')
+pytest -m "not lento"
+`
+
+### 11.7. Rastreabilidade de Testes x Codigo-Fonte
+
+| Teste | Arquivo de Implementacao | Funcao / Rota Testada |
+| :--- | :--- | :--- |
+| 	est_baixa_simples_um_ingrediente | src/API/main.py | POST /checkout/enviar (linhas 404-409) |
+| 	est_transicao_esperando_para_preparando | src/Desktop/paginas/paginaCozinha/pedidos.py | lterar_status_pedido() |
+| 	est_controle_1_abre_pagina_adm | src/Desktop/paginas/pagina_login.py | cao_login() |
+| 	est_uni_critico_abaixo_15 | src/Desktop/paginas/paginasADM/estoque_view.py | calcular_status_automatico() |
+| 	est_cupom_bemvindo30_e_valido | src/API/main.py | POST /api/validar-cupom |
+| 	est_home_retorna_status_no_ar | src/API/main.py | GET / |
+| 	est_adicionar_ao_carrinho_seta_cookie | src/API/main.py | POST /carrinho/adicionar |
+| 	est_unico_admin_nao_pode_ser_rebaixado | src/Desktop/paginas/paginasADM/gestao_usuarios_modal.py | lternar_cargo() |
+
+---
